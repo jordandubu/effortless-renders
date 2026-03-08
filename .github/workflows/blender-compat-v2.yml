@@ -7,8 +7,6 @@
 name: Blender Compatibility Check
 
 on:
-  push:
-    branches: [main]
   schedule:
     # Every 2 weeks on Monday at 6 AM UTC
     - cron: '0 6 1,15 * *'
@@ -494,4 +492,3 @@ PYEOF
           git push origin blender-compat-cache --force
 
           echo "✅ Cached version updated to $VERSION"
-# Force trigger
