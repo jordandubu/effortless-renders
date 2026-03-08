@@ -110,6 +110,24 @@ def test_register_unregister():
         addon_mod.register()
         print("  ✅ register() succeeded")
 
+        # Verify specific operators exist
+        print("  Verifying operators...")
+        expected_ops = [
+            "object.rendering_operator",
+            "object.test_connection",
+            "scene.import_scene",
+            "object.import_helper_box",
+            "object.open_library_path"
+        ]
+        
+        for op_id in expected_ops:
+            module, name = op_id.split(".")
+            if hasattr(bpy.ops, module) and hasattr(getattr(bpy.ops, module), name):
+                print(f"    ✅ {op_id} is registered")
+            else:
+                errors.append(f"Operator {op_id} failed to register (not found in bpy.ops)")
+                print(f"    ❌ {op_id} NOT found")
+
         # Test unregister
         print("  Calling unregister()...")
         addon_mod.unregister()
