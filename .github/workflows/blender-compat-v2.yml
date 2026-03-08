@@ -7,6 +7,8 @@
 name: Blender Compatibility Check
 
 on:
+  push:
+    branches: [main]
   schedule:
     # Every 2 weeks on Monday at 6 AM UTC
     - cron: '0 6 1,15 * *'
@@ -34,6 +36,7 @@ jobs:
       latest_version: ${{ steps.check.outputs.latest_version }}
       should_test: ${{ steps.check.outputs.should_test }}
       has_api_key: ${{ steps.check.outputs.has_api_key }}
+      version_outdated: ${{ steps.check.outputs.version_outdated }}
     steps:
       - uses: actions/checkout@v4
 
@@ -87,10 +90,10 @@ PYEOF
 
           # Test if PyPI version > Current in bl_info OR PyPI version != Cache
           # Using python for version comparison to be safe
-          SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '${{ inputs.force_test }}' == 'true' else 'false')")
+          FORCE="${{ inputs.force_test || 'true' }}"
+          SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '$FORCE' == 'true' else 'false')")
           
           # If PyPI > Current but no fix needed, we still want to trigger the update
-          # We'll set a flag to tell the test job to 'fail' if version is just outdated
           if [ "$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') else 'false')")" = "true" ]; then
             echo "version_outdated=true" >> $GITHUB_OUTPUT
           else
