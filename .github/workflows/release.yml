@@ -28,14 +28,12 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           RELEASE_NAME="effortless-renders-${VERSION}"
+          INTERNAL_NAME="effortless_renders"
 
-          mkdir -p "$RELEASE_NAME"
-          cp -r __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$RELEASE_NAME/"
+          mkdir -p "$INTERNAL_NAME"
+          cp -r __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$INTERNAL_NAME/"
 
-          # Include render_scenes if present
-          # [ -d render_scenes ] && cp -r render_scenes "$RELEASE_NAME/"
-
-          zip -r "${RELEASE_NAME}.zip" "$RELEASE_NAME"
+          zip -r "${RELEASE_NAME}.zip" "$INTERNAL_NAME"
           echo "📦 Created ${RELEASE_NAME}.zip"
           ls -lh "${RELEASE_NAME}.zip"
 

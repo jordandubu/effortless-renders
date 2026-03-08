@@ -418,11 +418,12 @@ jobs:
           
           TAG="v${ADDON_VER}"
           RELEASE_NAME="effortless-renders-${TAG}"
+          INTERNAL_NAME="effortless_renders"
           
           # Package
-          mkdir -p "$RELEASE_NAME"
-          cp __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$RELEASE_NAME/"
-          zip -r "${RELEASE_NAME}.zip" "$RELEASE_NAME"
+          mkdir -p "$INTERNAL_NAME"
+          cp __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$INTERNAL_NAME/"
+          zip -r "${RELEASE_NAME}.zip" "$INTERNAL_NAME"
 
           # Create release
           gh release create "$TAG" "${RELEASE_NAME}.zip" \
