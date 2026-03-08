@@ -88,9 +88,18 @@ def render_scene(scene, scene_name, export_path, shading_type='RENDERED'):
     if not os.path.exists(scene_export_path):
         os.makedirs(scene_export_path)
 
-    scene.render.image_settings.file_format = 'PNG'
-    scene.render.use_file_extension = True
-    scene.render.filepath = os.path.join(scene_export_path, scene_name)
+    if scene_name.lower() == 'turntable':
+        scene.render.image_settings.file_format = 'FFMPEG'
+        scene.render.ffmpeg.format = 'MPEG4'
+        scene.render.ffmpeg.codec = 'H264'
+        scene.render.ffmpeg.constant_rate_factor = 'HIGH'
+        scene.render.ffmpeg.ffmpeg_preset = 'GOOD'
+        # Save directly as mp4 in the main export_path
+        scene.render.filepath = os.path.join(export_path, "turntable_video.mp4")
+    else:
+        scene.render.image_settings.file_format = 'PNG'
+        scene.render.use_file_extension = True
+        scene.render.filepath = os.path.join(scene_export_path, scene_name)
 
     for area in bpy.context.screen.areas:
         if area.type == 'VIEW_3D':

@@ -125,40 +125,7 @@ class RenderingOperator(bpy.types.Operator):
         # Étape 3 : Réglez la scène actuelle sur la scène d'origine
         bpy.context.window.scene = current_scene
 
-        # Modify 'export_path' to include the 'turntable' directory
-        export_path = os.path.join(context.scene.export_path, "turntable")
-        
-        if os.path.isdir(export_path):
-            # Assuming 'export_path' now correctly points to the directory containing the images
-            image_sequence_pattern = os.path.join(export_path, "turntable%04d.png")  # Adjust pattern as needed
 
-            # Define FFmpeg executable path
-            addon_dir = os.path.dirname(os.path.realpath(__file__))
-            ffmpeg_path = os.path.join(addon_dir, "ffmpeg", "bin", "ffmpeg.exe")
-
-            video_output_path = os.path.join(export_path, "..", "output_video.mp4")  # Save the video one level up from 'turntable'
-
-            ffmpeg_command = [
-                ffmpeg_path,
-                '-y',  # Force l'écrasement des fichiers de sortie existants
-                '-framerate', '24',  # Ou votre fréquence d'images souhaitée
-                '-i', image_sequence_pattern,
-                '-c:v', 'libx264',
-                '-pix_fmt', 'yuv420p',
-                video_output_path
-            ]
-
-
-            # Execute FFmpeg command
-            try:
-                subprocess.run(ffmpeg_command, check=True)
-                self.report({'INFO'}, f"Video successfully created: {video_output_path}")
-            except subprocess.CalledProcessError as e:
-                self.report({'ERROR'}, "Failed to create video. Error: " + str(e))
-                return {'CANCELLED'}
-        else:
-            # The 'turntable' directory does not exist; you might want to handle this case, e.g.,:
-            self.report({'WARNING'}, "The 'turntable' directory does not exist. Skipping video creation.")
         return {'FINISHED'}
 
 
