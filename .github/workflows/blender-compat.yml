@@ -261,7 +261,7 @@ PYEOF
           {
             "contents": [{
               "parts": [{
-                "text": "You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.\n\nIMPORTANT RULES:\n- Only fix what is broken. Do not refactor or change working code.\n- Maintain backward compatibility where possible.\n- Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.\n- Output ONLY the fixed file contents in this exact format for EACH file that needs changes:\n\n--- FILE: filename.py ---\n<full file content>\n--- END FILE ---\n\nIf no fix is needed for a file, do not include it.\nDo NOT include any explanation, markdown, or commentary — ONLY the file blocks above.\n\n## Blender version\nBLENDER_VERSION_PLACEHOLDER\n\n## Error log\nERROR_LOG_PLACEHOLDER\n\n## Current source code\nSOURCE_CODE_PLACEHOLDER\n\n## Blender migration notes (if available)\nMIGRATION_NOTES_PLACEHOLDER"
+                "text": "You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.\n\nIMPORTANT RULES:\n- Only fix what is broken. Do not refactor or change working code.\n- Maintain backward compatibility where possible.\n- Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.\n- Increment the 'version' tuple in bl_info (e.g., (1, 1) -> (1, 1, 1)) to reflect this update.\n- Output ONLY the fixed file contents in this exact format for EACH file that needs changes:\n\n--- FILE: filename.py ---\n<full file content>\n--- END FILE ---\n\nIf no fix is needed for a file, do not include it.\nDo NOT include any explanation, markdown, or commentary — ONLY the file blocks above.\n\n## Blender version\nBLENDER_VERSION_PLACEHOLDER\n\n## Error log\nERROR_LOG_PLACEHOLDER\n\n## Current source code\nSOURCE_CODE_PLACEHOLDER\n\n## Blender migration notes (if available)\nMIGRATION_NOTES_PLACEHOLDER"
               }]
             }],
             "generationConfig": {
@@ -410,6 +410,31 @@ PYEOF
           # Then merge it (squash)
           gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --squash --admin -d
           echo "✅ PR #${{ steps.cpr.outputs.pull-request-number }} merged automatically!"
+          
+          # Create an automatic release after merge
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          # Extract versions
+          BL_VER="${{ needs.check-version.outputs.latest_version }}"
+          ADDON_VER=$(python3 -c "import ast; f=open('__init__.py'); t=ast.parse(f.read()); v=[node.value for node in ast.walk(t) if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id=='bl_info'][0]['version']; print('.'.join(map(str, v)))")
+          
+          TAG="v${ADDON_VER}"
+          RELEASE_NAME="effortless-renders-${TAG}"
+          
+          # Package
+          mkdir -p "$RELEASE_NAME"
+          cp __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$RELEASE_NAME/"
+          zip -r "${RELEASE_NAME}.zip" "$RELEASE_NAME"
+
+          # Create release
+          gh release create "$TAG" "${RELEASE_NAME}.zip" \
+            --title "Release ${TAG} (Auto-fix for Blender ${BL_VER})" \
+            --notes "Automated compatibility update for Blender ${BL_VER}."
+          echo "🚀 Auto-release created: $TAG"
 
       - name: Open Issue if fix failed
         if: steps.retest.outcome == 'failure'
