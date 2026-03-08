@@ -5,3 +5,4 @@ render_scenes/LilySurface/hdrihaven/Rural Asphalt Road/.meta
 .git.code-workspace
 *.zip
 .ruff_cache/
+agents.md
