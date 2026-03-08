@@ -7,6 +7,9 @@
 name: Blender Compatibility Check
 
 on:
+  schedule:
+    # Every 2 weeks on Monday at 6 AM UTC
+    - cron: '0 6 1,15 * *'
   workflow_dispatch:
     inputs:
       force_test:
