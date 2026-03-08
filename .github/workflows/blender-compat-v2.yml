@@ -494,3 +494,4 @@ PYEOF
           git push origin blender-compat-cache --force
 
           echo "✅ Cached version updated to $VERSION"
+# Force trigger
