@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────
 # Blender Compatibility Check + Auto-Fix
 # Runs every 2 weeks. Detects new Blender versions, tests the
-# addon, and uses Gemini 1.5 Pro to auto-fix + create a PR.
+# addon, and uses Gemini 3.1 Pro to auto-fix + create a PR.
 # ─────────────────────────────────────────────────────────────
 
 name: Blender Compatibility Check
@@ -194,7 +194,7 @@ jobs:
             lint_output.txt
             combined_error.txt
 
-  # ── Job 3: Auto-fix with Gemini 1.5 Pro ───────────────────
+  # ── Job 3: Auto-fix with Gemini 3.1 Pro ───────────────────
   auto-fix:
     needs: [check-version, test-addon]
     if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key == 'true'
@@ -253,56 +253,68 @@ jobs:
         run: |
           cat > call_gemini.py << 'PYEOF'
           import os
+          import sys
           from google import genai
 
-          client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-          
-          version = "${{ needs.check-version.outputs.latest_version }}"
-          error_log = """${{ needs.test-addon.outputs.error_log }}"""
-          migration = """${{ steps.migration.outputs.migration_notes }}"""
-          
-          with open("all_source.txt", "r") as f:
-              source = f.read()
+          try:
+              client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+              
+              # Diagnostic: List models to log
+              print("--- AVAILABLE MODELS ---")
+              for m in client.models.list():
+                  print(f"  {m.name}")
+              print("------------------------")
 
-          prompt = f"""You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.
+              version = "${{ needs.check-version.outputs.latest_version }}"
+              error_log = """${{ needs.test-addon.outputs.error_log }}"""
+              migration = """${{ steps.migration.outputs.migration_notes }}"""
+              
+              with open("all_source.txt", "r") as f:
+                  source = f.read()
 
-          IMPORTANT RULES:
-          - Only fix what is broken. Do not refactor or change working code.
-          - Maintain backward compatibility where possible.
-          - Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.
-          - Increment the 'version' tuple in bl_info (e.g., (1, 1) -> (1, 1, 1)) to reflect this update.
-          - Output ONLY the fixed file contents in this exact format for EACH file that needs changes:
+              prompt = f"""You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.
 
-          --- FILE: filename.py ---
-          <full file content>
-          --- END FILE ---
+              IMPORTANT RULES:
+              - Only fix what is broken. Do not refactor or change working code.
+              - Maintain backward compatibility where possible.
+              - Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.
+              - Increment the 'version' tuple in bl_info (e.g., (1, 1) -> (1, 1, 1)) to reflect this update.
+              - Output ONLY the fixed file contents in this exact format for EACH file that needs changes:
 
-          If no fix is needed for a file, do not include it.
-          Do NOT include any explanation, markdown, or commentary — ONLY the file blocks above.
+              --- FILE: filename.py ---
+              <full file content>
+              --- END FILE ---
 
-          ## Blender version
-          {version}
+              If no fix is needed for a file, do not include it.
+              Do NOT include any explanation, markdown, or commentary — ONLY the file blocks above.
 
-          ## Error log
-          {error_log[:4000]}
+              ## Blender version
+              {version}
 
-          ## Current source code
-          {source[:20000]}
+              ## Error log
+              {error_log[:4000]}
 
-          ## Blender migration notes (if available)
-          {migration[:4000]}"""
+              ## Current source code
+              {source[:20000]}
 
-          response = client.models.generate_content(
-              model="gemini-1.5-pro",
-              contents=prompt
-          )
-          
-          with open("gemini_output.txt", "w") as f:
-              f.write(response.text)
+              ## Blender migration notes (if available)
+              {migration[:4000]}"""
+
+              # Using gemini-3.1-pro as requested
+              response = client.models.generate_content(
+                  model="gemini-3.1-pro",
+                  contents=prompt
+              )
+              
+              with open("gemini_output.txt", "w") as f:
+                  f.write(response.text)
+              print("✅ Gemini response received")
+          except Exception as e:
+              print(f"❌ Error calling Gemini: {e}", file=sys.stderr)
+              sys.exit(1)
           PYEOF
           
           python3 call_gemini.py
-          echo "✅ Gemini response received"
 
       - name: Apply fixes
         id: apply
@@ -310,6 +322,9 @@ jobs:
           # Parse Gemini output and apply file changes
           python3 << 'PYEOF'
           import re, os, sys
+
+          if not os.path.exists("gemini_output.txt"):
+              sys.exit(1)
 
           with open("gemini_output.txt", "r") as f:
               content = f.read()
@@ -370,7 +385,7 @@ jobs:
 
             A new Blender version (`bpy==${{ needs.check-version.outputs.latest_version }}`) was detected and the addon failed compatibility tests.
 
-            **Gemini 1.5 Pro** analyzed the errors and generated this fix automatically.
+            **Gemini 3.1 Pro** analyzed the errors and generated this fix automatically.
 
             ### What was broken
             ```
