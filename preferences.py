@@ -20,9 +20,8 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import os
-import bpy
-from bpy.types import Operator, AddonPreferences
-from bpy.props import StringProperty, IntProperty, BoolProperty
+from bpy.types import AddonPreferences
+from bpy.props import StringProperty
 from .__init__ import ADDON_NAME
 
 class AddonPreferences(AddonPreferences):

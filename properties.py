@@ -23,8 +23,7 @@ import os
 import bpy
 from bpy.props import (
     StringProperty,
-    BoolProperty,
-    EnumProperty
+    BoolProperty
 )
 
 from .operators import RenderingOperator, TestConnectionOperator, CreateProductOperator, ImportHelperBoxOperator, OpenLibraryPathOperator, ImportSceneOperator
@@ -123,19 +122,19 @@ def register():
         description="Enable or disable rendering",
         default=False
     )
-    
+
     bpy.types.Scene.turntable = bpy.props.BoolProperty(
         name="Turntable",
         description="Enable or disable turntable rendering",
         default=False
     )
-    
+
     bpy.types.Scene.searchimage = bpy.props.BoolProperty(
         name="Search Image",
         description="Enable or disable search image rendering",
         default=False
     )
-    
+
     bpy.types.Scene.wire = bpy.props.BoolProperty(
         name="Wire",
         description="Enable or disable wire rendering",

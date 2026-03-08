@@ -42,11 +42,11 @@ class RenderingOperatorPanel(bpy.types.Panel):
             col.prop(scene, "my_collection", text="")
             col.label(text="Export Path:")
             col.prop(scene, "export_path", text="")
-            
+
             col.label(text="Render scene:")
             # Création d'une nouvelle ligne
             row = col.row()
-            
+
             # Ajout du bouton avec l'icône "CUBE"
             row.operator("object.import_helper_box", text="", icon='CUBE')
             row.operator("object.open_library_path", icon='FILE_FOLDER', text="")
@@ -56,7 +56,7 @@ class RenderingOperatorPanel(bpy.types.Panel):
             col.operator("object.rendering_operator", icon='RENDER_ANIMATION')
 
             layout = self.layout
-            
+
             layout.prop(context.scene, "rendering")
             layout.prop(context.scene, "turntable")
             layout.prop(context.scene, "searchimage")

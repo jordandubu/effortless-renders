@@ -48,16 +48,16 @@ def test_connection(api_key, member_id):
     except requests.RequestException as e:
         print(f"An error occurred: {e}")
         return False
-    
+
 def setup_wireframe_material():
     """Crée un matériau wireframe et le retourne."""
     mat = bpy.data.materials.new(name="Wireframe_Material")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
-    
+
     for node in nodes:
         nodes.remove(node)
-    
+
     wire_shader = nodes.new(type="ShaderNodeBsdfDiffuse")
     wire_shader.location = (0,0)
 
@@ -69,13 +69,12 @@ def setup_wireframe_material():
 
     mat.node_tree.links.new(wire_shader.inputs[0], wireframe.outputs[0])
     mat.node_tree.links.new(material_output.inputs["Surface"], wire_shader.outputs["BSDF"])
-    
+
     return mat
 
 
 def replace_material(object, old_material, new_material):
     ob = object
-    om = bpy.data.materials[old_material]
     nm = bpy.data.materials[new_material]
     for s in ob.material_slots:
         if s.material.name == old_material:

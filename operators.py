@@ -19,8 +19,11 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-import bpy, os, subprocess
-from .utils import test_connection, setup_wireframe_material, replace_material, render_scene
+import bpy
+import os
+import subprocess
+import sys
+from .utils import test_connection, render_scene
 from .__init__ import ADDON_NAME
 
 class TestConnectionOperator(bpy.types.Operator):
@@ -52,7 +55,6 @@ class RenderingOperator(bpy.types.Operator):
             self.report({'ERROR'}, "No collection selected")
             return {'CANCELLED'}
 
-        dir_path = os.path.dirname(os.path.realpath(__file__))
         blend_file_name = context.scene.render_scene
         blend_file_path = os.path.join(context.preferences.addons[ADDON_NAME].preferences.library_path, blend_file_name)
 
@@ -163,10 +165,9 @@ class ImportHelperBoxOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        dir_path = os.path.dirname(os.path.realpath(__file__))
         blend_file_name = context.scene.render_scene  # ceci est seulement le nom du fichier
         blend_file_path = os.path.join(context.preferences.addons[ADDON_NAME].preferences.library_path, blend_file_name)
-        
+
         with bpy.data.libraries.load(blend_file_path, link=True) as (data_from, data_to):  # Notez que 'link' est à True
             # Importer la collection "helperbox" si elle est disponible
             if "helperbox" in data_from.collections:
@@ -201,12 +202,12 @@ class OpenLibraryPathOperator(bpy.types.Operator):
     bl_idname = "object.open_library_path"
     bl_label = "Open Library Path"
     bl_description = "Open the library path in the file explorer"
-    
+
     def execute(self, context):
         library_path = context.preferences.addons[ADDON_NAME].preferences.library_path
         path = bpy.path.abspath(library_path)
 
-        
+
         if os.path.exists(path):
             if os.name == 'nt':  # Windows
                 os.startfile(path)

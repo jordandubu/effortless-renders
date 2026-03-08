@@ -56,20 +56,27 @@ jobs:
           echo "latest_version=$LATEST" >> $GITHUB_OUTPUT
           echo "📦 Latest bpy version on PyPI: $LATEST"
 
+          # Get current blender version from bl_info
+          CURRENT_BLENDER=$(python3 -c "import ast; f=open('__init__.py'); t=ast.parse(f.read()); b=[node.value for node in ast.walk(t) if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id=='bl_info'][0]['blender']; print('.'.join(map(str, b)))")
+          echo "🔖 Current bl_info blender version: $CURRENT_BLENDER"
+
           # Check cached version
           CACHED=""
           if git ls-remote --heads origin blender-compat-cache | grep -q blender-compat-cache; then
             git fetch origin blender-compat-cache
             CACHED=$(git show origin/blender-compat-cache:last_tested_version.txt 2>/dev/null || echo "")
           fi
-          echo "🔖 Last tested version: ${CACHED:-none}"
+          echo "📅 Last cached tested version: ${CACHED:-none}"
 
-          if [ "${{ inputs.force_test }}" = "true" ] || [ "$LATEST" != "$CACHED" ]; then
-            echo "should_test=true" >> $GITHUB_OUTPUT
-            echo "✅ New version detected or forced — will test."
+          # Test if PyPI version > Current in bl_info OR PyPI version != Cache
+          # Using python for version comparison to be safe
+          SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '${{ inputs.force_test }}' == 'true' else 'false')")
+          
+          echo "should_test=$SHOULD_TEST" >> $GITHUB_OUTPUT
+          if [ "$SHOULD_TEST" = "true" ]; then
+            echo "✅ Update or test needed — will proceed."
           else
-            echo "should_test=false" >> $GITHUB_OUTPUT
-            echo "⏭️ Already tested $LATEST — skipping."
+            echo "⏭️ Addon is up to date and recently tested — skipping."
           fi
 
   # ── Job 2: Test addon against new Blender version ─────────
@@ -88,14 +95,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install bpy
+      - name: Install dependencies
         run: |
+          pip install packaging ruff
           VERSION="${{ needs.check-version.outputs.latest_version }}"
           echo "📦 Installing bpy==$VERSION ..."
           pip install bpy==$VERSION 2>&1 | tail -5
-
-      - name: Install linter
-        run: pip install ruff
 
       - name: Run lint check
         id: lint
@@ -113,8 +118,10 @@ jobs:
         run: |
           python .github/scripts/test_addon.py 2>&1 | tee test_output.txt
           TEST_EXIT=$?
+          
+          LINT_EXIT=${{ steps.lint.outputs.lint_exit_code }}
 
-          if [ $TEST_EXIT -eq 0 ]; then
+          if [ $TEST_EXIT -eq 0 ] && [ $LINT_EXIT -eq 0 ]; then
             echo "passed=true" >> $GITHUB_OUTPUT
           else
             echo "passed=false" >> $GITHUB_OUTPUT
@@ -159,6 +166,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Pre-fix with Ruff
+        run: |
+          pip install ruff
+          ruff check --select=E,F,W --ignore=E402,E501 --fix \
+            __init__.py main.py operators.py panels.py preferences.py properties.py utils.py || true
 
       - name: Collect addon source code
         id: source
@@ -209,7 +222,7 @@ jobs:
           {
             "contents": [{
               "parts": [{
-                "text": "You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version. Your job is to fix the Python code so it works with the new version.\n\nIMPORTANT RULES:\n- Only fix what is broken. Do not refactor or change working code.\n- Maintain backward compatibility where possible.\n- Output ONLY the fixed file contents in this exact format for EACH file that needs changes:\n\n--- FILE: filename.py ---\n<full file content>\n--- END FILE ---\n\nIf no fix is needed for a file, do not include it.\nDo NOT include any explanation, markdown, or commentary — ONLY the file blocks above.\n\n## Blender version\nBLENDER_VERSION_PLACEHOLDER\n\n## Error log\nERROR_LOG_PLACEHOLDER\n\n## Current source code\nSOURCE_CODE_PLACEHOLDER\n\n## Blender migration notes (if available)\nMIGRATION_NOTES_PLACEHOLDER"
+                "text": "You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.\n\nIMPORTANT RULES:\n- Only fix what is broken. Do not refactor or change working code.\n- Maintain backward compatibility where possible.\n- Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.\n- Output ONLY the fixed file contents in this exact format for EACH file that needs changes:\n\n--- FILE: filename.py ---\n<full file content>\n--- END FILE ---\n\nIf no fix is needed for a file, do not include it.\nDo NOT include any explanation, markdown, or commentary — ONLY the file blocks above.\n\n## Blender version\nBLENDER_VERSION_PLACEHOLDER\n\n## Error log\nERROR_LOG_PLACEHOLDER\n\n## Current source code\nSOURCE_CODE_PLACEHOLDER\n\n## Blender migration notes (if available)\nMIGRATION_NOTES_PLACEHOLDER"
               }]
             }],
             "generationConfig": {
