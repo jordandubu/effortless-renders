@@ -21,7 +21,7 @@
 
 
 bl_info = {
-    "name": "3D Market Exporter",
+    "name": "Effortless Renders",
     "description": "Create renders, generate description",
     "author": "Jordan Dubu - Doyorn",
     "version": (1, 1, 1),
@@ -34,7 +34,7 @@ bl_info = {
 }
 
 from . import properties
-ADDON_NAME = "Turbosquid Exporter"
+ADDON_NAME = __package__
 
 def register():
     properties.register()

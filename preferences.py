@@ -30,7 +30,7 @@ class AddonPreferences(AddonPreferences):
     library_path: StringProperty(
         name="Library Path",
         subtype='DIR_PATH',
-        default=os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Blender Foundation", "Blender", "3.6", "scripts", "addons", "Turbosquid Exporter", "render_scenes")
+        default=os.path.join(os.path.dirname(__file__), "render_scenes")
     )
 
     def draw(self, context):
