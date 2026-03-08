@@ -4,7 +4,7 @@
 # addon, and uses Gemini 3.1 Pro to auto-fix + create a PR.
 # ─────────────────────────────────────────────────────────────
 
-name: Blender Compatibility Check
+# name: Blender Compatibility Check
 
 on:
   schedule:
