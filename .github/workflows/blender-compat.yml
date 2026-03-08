@@ -259,12 +259,6 @@ jobs:
           try:
               client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
               
-              # Diagnostic: List models to log
-              print("--- AVAILABLE MODELS ---")
-              for m in client.models.list():
-                  print(f"  {m.name}")
-              print("------------------------")
-
               version = "${{ needs.check-version.outputs.latest_version }}"
               error_log = """${{ needs.test-addon.outputs.error_log }}"""
               migration = """${{ steps.migration.outputs.migration_notes }}"""
@@ -300,9 +294,9 @@ jobs:
               ## Blender migration notes (if available)
               {migration[:4000]}"""
 
-              # Using gemini-3.1-pro as requested
+              # Using gemini-3.1-pro-preview as identified from diagnostics
               response = client.models.generate_content(
-                  model="gemini-3.1-pro",
+                  model="gemini-3.1-pro-preview",
                   contents=prompt
               )
               
