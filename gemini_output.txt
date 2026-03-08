@@ -1,3 +1,4 @@
+--- FILE: __init__.py ---
 #!/usr/bin/python3
 # copyright (c) 2023 - DUBU JORDAN
 
@@ -44,3 +45,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+--- END FILE ---
