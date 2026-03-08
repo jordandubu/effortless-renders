@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────
 # Blender Compatibility Check + Auto-Fix
 # Runs every 2 weeks. Detects new Blender versions, tests the
-# addon, and uses Gemini 3.1 Pro to auto-fix + create a PR.
+# addon, and uses Gemini 1.5 Pro to auto-fix + create a PR.
 # ─────────────────────────────────────────────────────────────
 
 name: Blender Compatibility Check
@@ -194,7 +194,7 @@ jobs:
             lint_output.txt
             combined_error.txt
 
-  # ── Job 3: Auto-fix with Gemini 3.1 Pro ───────────────────
+  # ── Job 3: Auto-fix with Gemini 1.5 Pro ───────────────────
   auto-fix:
     needs: [check-version, test-addon]
     if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key == 'true'
@@ -293,7 +293,7 @@ jobs:
           {migration[:4000]}"""
 
           response = client.models.generate_content(
-              model="gemini-3.1-pro",
+              model="gemini-1.5-pro",
               contents=prompt
           )
           
@@ -370,7 +370,7 @@ jobs:
 
             A new Blender version (`bpy==${{ needs.check-version.outputs.latest_version }}`) was detected and the addon failed compatibility tests.
 
-            **Gemini 3.1 Pro** analyzed the errors and generated this fix automatically.
+            **Gemini 1.5 Pro** analyzed the errors and generated this fix automatically.
 
             ### What was broken
             ```
