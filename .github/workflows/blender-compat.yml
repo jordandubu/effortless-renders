@@ -33,12 +33,20 @@ jobs:
     outputs:
       latest_version: ${{ steps.check.outputs.latest_version }}
       should_test: ${{ steps.check.outputs.should_test }}
+      has_api_key: ${{ steps.check.outputs.has_api_key }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Get latest bpy version from PyPI
         id: check
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "has_api_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_api_key=false" >> $GITHUB_OUTPUT
+          fi
           # Get latest version from PyPI
           if [ -n "${{ inputs.blender_version }}" ]; then
             LATEST="${{ inputs.blender_version }}"
@@ -142,7 +150,7 @@ jobs:
   # ── Job 3: Auto-fix with Gemini 3.1 Pro ───────────────────
   auto-fix:
     needs: [check-version, test-addon]
-    if: needs.test-addon.outputs.test_passed == 'false' && vars.GEMINI_API_KEY != '' || needs.test-addon.outputs.test_passed == 'false' && secrets.GEMINI_API_KEY != ''
+    if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -368,7 +376,7 @@ jobs:
   # ── Job 4: Fallback Issue (no API key) ─────────────────────
   fallback-issue:
     needs: [check-version, test-addon]
-    if: needs.test-addon.outputs.test_passed == 'false' && !secrets.GEMINI_API_KEY
+    if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
