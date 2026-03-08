@@ -74,18 +74,23 @@ def test_bl_info():
 def test_register_unregister():
     """Test that the addon can register and unregister in Blender."""
     print("\n── Testing register/unregister ──")
+    
+    # CRITICAL FIX: Use the standardized name that Blender will actually use.
+    # If the repository name or folder name has hyphens, this test should 
+    # help us identify that it's an invalid Python module name.
+    addon_name = "effortless_renders" 
+    
+    import re
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', addon_name):
+        errors.append(f"Invalid addon name '{addon_name}': Module names cannot contain hyphens or dots.")
+        print(f"  ❌ Invalid module name: {addon_name}")
+        return
+
     try:
         import bpy
     except ImportError:
         errors.append("bpy not available — cannot test register/unregister")
         return
-
-    # Install the addon from the repo directory
-    # We need to make the addon installable: copy to a temp zip or add to path
-    import shutil
-    import tempfile
-
-    addon_name = "effortless_renders"
 
     # Create a temporary addon directory that bpy can load
     tmp_dir = tempfile.mkdtemp()
