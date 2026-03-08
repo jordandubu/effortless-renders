@@ -89,6 +89,14 @@ PYEOF
           # Using python for version comparison to be safe
           SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '${{ inputs.force_test }}' == 'true' else 'false')")
           
+          # If PyPI > Current but no fix needed, we still want to trigger the update
+          # We'll set a flag to tell the test job to 'fail' if version is just outdated
+          if [ "$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') else 'false')")" = "true" ]; then
+            echo "version_outdated=true" >> $GITHUB_OUTPUT
+          else
+            echo "version_outdated=false" >> $GITHUB_OUTPUT
+          fi
+
           echo "should_test=$SHOULD_TEST" >> $GITHUB_OUTPUT
           if [ "$SHOULD_TEST" = "true" ]; then
             echo "✅ Update or test needed — will proceed."
@@ -138,7 +146,16 @@ PYEOF
           
           LINT_EXIT=${{ steps.lint.outputs.lint_exit_code }}
 
-          if [ $TEST_EXIT -eq 0 ] && [ $LINT_EXIT -eq 0 ]; then
+          # If version is outdated, mark as failed even if it works (to trigger metadata update)
+          if [ "${{ needs.check-version.outputs.version_outdated }}" = "true" ]; then
+            echo "❌ Version in bl_info is outdated. Forcing update."
+            echo "version_outdated_error=true" >> $GITHUB_OUTPUT
+            TEST_FINAL_PASS=1
+          else
+            TEST_FINAL_PASS=$TEST_EXIT
+          fi
+
+          if [ $TEST_FINAL_PASS -eq 0 ] && [ $LINT_EXIT -eq 0 ]; then
             echo "passed=true" >> $GITHUB_OUTPUT
           else
             echo "passed=false" >> $GITHUB_OUTPUT
@@ -151,6 +168,11 @@ PYEOF
             echo ""
             echo "=== TEST OUTPUT ==="
             cat test_output.txt
+            if [ "${{ needs.check-version.outputs.version_outdated }}" = "true" ]; then
+                echo ""
+                echo "=== VERSION ERROR ==="
+                echo "Addon is compatible, but bl_info needs update to: ${{ needs.check-version.outputs.latest_version }}"
+            fi
           } > combined_error.txt
 
           # Store error log as output (truncated for GitHub limits)
