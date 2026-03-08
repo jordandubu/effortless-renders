@@ -6,3 +6,16 @@ render_scenes/LilySurface/hdrihaven/Rural Asphalt Road/.meta
 *.zip
 .ruff_cache/
 agents.md
+.venv/
+venv/
+ENV/
+env/
+all_source.txt
+call_gemini.py
+gemini_output.txt
+retest_output.txt
+combined_error.txt
+lint_output.txt
+test_output.txt
+prompt.json
+get_version.py
