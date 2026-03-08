@@ -1,0 +1,32 @@
+============================================================
+Effortless Renders — Addon Compatibility Test
+============================================================
+── Testing bl_info ──
+  bl_info = {'name': '3D Market Exporter', 'description': 'Create renders, generate description', 'author': 'Jordan Dubu - Doyorn', 'version': (1, 1, 1), 'blender': (5, 0, 1), 'location': 'View3D > Tool Shelf > Turbosquid Tab', 'warning': '', 'wiki_url': '', 'tracker_url': '', 'category': 'Development'}
+  ✅ bl_info validation passed
+
+── Testing syntax ──
+  ✅ properties.py
+  ✅ main.py
+  ✅ preferences.py
+  ✅ operators.py
+  ✅ utils.py
+  ✅ __init__.py
+  ✅ call_gemini.py
+  ✅ panels.py
+
+── Testing register/unregister ──
+  Calling register()...
+  ✅ register() succeeded
+  Verifying operators...
+    ✅ object.rendering_operator is registered
+    ✅ object.test_connection is registered
+    ✅ scene.import_scene is registered
+    ✅ object.import_helper_box is registered
+    ✅ object.open_library_path is registered
+  Calling unregister()...
+  ✅ unregister() succeeded
+
+============================================================
+✅ ALL TESTS PASSED
+============================================================
