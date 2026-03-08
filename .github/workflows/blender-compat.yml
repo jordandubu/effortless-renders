@@ -1,0 +1,478 @@
+# ─────────────────────────────────────────────────────────────
+# Blender Compatibility Check + Auto-Fix
+# Runs every 2 weeks. Detects new Blender versions, tests the
+# addon, and uses Gemini 2.0 Flash to auto-fix + create a PR.
+# ─────────────────────────────────────────────────────────────
+
+name: Blender Compatibility Check
+
+on:
+  schedule:
+    # Every 2 weeks on Monday at 6 AM UTC
+    - cron: '0 6 1,15 * *'
+  workflow_dispatch:
+    inputs:
+      force_test:
+        description: 'Force test even if version unchanged'
+        type: boolean
+        default: false
+      blender_version:
+        description: 'Specific bpy version to test (leave empty for latest)'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # ── Job 1: Check for new Blender version ──────────────────
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      latest_version: ${{ steps.check.outputs.latest_version }}
+      should_test: ${{ steps.check.outputs.should_test }}
+      has_api_key: ${{ steps.check.outputs.has_api_key }}
+      version_outdated: ${{ steps.check.outputs.version_outdated }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest bpy version from PyPI
+        id: check
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "has_api_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_api_key=false" >> $GITHUB_OUTPUT
+          fi
+          # Get latest version from PyPI
+          if [ -n "${{ inputs.blender_version }}" ]; then
+            LATEST="${{ inputs.blender_version }}"
+          else
+            LATEST=$(curl -s https://pypi.org/pypi/bpy/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
+          fi
+          echo "latest_version=$LATEST" >> $GITHUB_OUTPUT
+          echo "📦 Latest bpy version on PyPI: $LATEST"
+
+          # Get current blender version from bl_info
+          cat > get_version.py << 'PYEOF'
+          import ast
+          import os
+
+          def get_bl_info_version():
+              with open('__init__.py', 'r') as f:
+                  tree = ast.parse(f.read())
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Assign):
+                      for target in node.targets:
+                          if isinstance(target, ast.Name) and target.id == 'bl_info':
+                              info = ast.literal_eval(node.value)
+                              return '.'.join(map(str, info.get('blender', (0,0,0))))
+              return "0.0.0"
+
+          print(get_bl_info_version())
+          PYEOF
+          CURRENT_BLENDER=$(python3 get_version.py)
+          echo "🔖 Current bl_info blender version: $CURRENT_BLENDER"
+
+          # Check cached version
+          CACHED=""
+          if git ls-remote --heads origin blender-compat-cache | grep -q blender-compat-cache; then
+            git fetch origin blender-compat-cache
+            CACHED=$(git show origin/blender-compat-cache:last_tested_version.txt 2>/dev/null || echo "")
+          fi
+          echo "📅 Last cached tested version: ${CACHED:-none}"
+
+          # Test if PyPI version > Current in bl_info OR PyPI version != Cache
+          # Using python for version comparison to be safe
+          FORCE="${{ inputs.force_test || 'false' }}"
+          SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '$FORCE' == 'true' else 'false')")
+          
+          # If PyPI > Current but no fix needed, we still want to trigger the update
+          if [ "$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') else 'false')")" = "true" ]; then
+            echo "version_outdated=true" >> $GITHUB_OUTPUT
+          else
+            echo "version_outdated=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "should_test=$SHOULD_TEST" >> $GITHUB_OUTPUT
+          if [ "$SHOULD_TEST" = "true" ]; then
+            echo "✅ Update or test needed — will proceed."
+          else
+            echo "⏭️ Addon is up to date and recently tested — skipping."
+          fi
+
+  # ── Job 2: Test addon against new Blender version ─────────
+  test-addon:
+    needs: check-version
+    if: needs.check-version.outputs.should_test == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      test_passed: ${{ steps.test.outputs.passed }}
+      error_log: ${{ steps.test.outputs.error_log }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install packaging ruff
+          VERSION="${{ needs.check-version.outputs.latest_version }}"
+          echo "📦 Installing bpy==$VERSION ..."
+          pip install bpy==$VERSION 2>&1 | tail -5
+
+      - name: Run lint check
+        id: lint
+        continue-on-error: true
+        run: |
+          echo "── Ruff Lint ──"
+          ruff check --select=E,F,W --ignore=E402,E501 \
+            __init__.py main.py operators.py panels.py preferences.py properties.py utils.py \
+            2>&1 | tee lint_output.txt
+          echo "lint_exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Run addon test
+        id: test
+        continue-on-error: true
+        run: |
+          python .github/scripts/test_addon.py 2>&1 | tee test_output.txt
+          TEST_EXIT=$?
+          
+          LINT_EXIT=${{ steps.lint.outputs.lint_exit_code }}
+
+          # If version is outdated, mark as failed even if it works (to trigger metadata update)
+          if [ "${{ needs.check-version.outputs.version_outdated }}" = "true" ]; then
+            echo "❌ Version in bl_info is outdated. Forcing update."
+            echo "version_outdated_error=true" >> $GITHUB_OUTPUT
+            TEST_FINAL_PASS=1
+          else
+            TEST_FINAL_PASS=$TEST_EXIT
+          fi
+
+          if [ $TEST_FINAL_PASS -eq 0 ] && [ $LINT_EXIT -eq 0 ]; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Combine logs for the auto-fix job
+          {
+            echo "=== LINT OUTPUT ==="
+            cat lint_output.txt
+            echo ""
+            echo "=== TEST OUTPUT ==="
+            cat test_output.txt
+            if [ "${{ needs.check-version.outputs.version_outdated }}" = "true" ]; then
+                echo ""
+                echo "=== VERSION ERROR ==="
+                echo "Addon is compatible, but bl_info needs update to: ${{ needs.check-version.outputs.latest_version }}"
+            fi
+          } > combined_error.txt
+
+          # Store error log as output (truncated for GitHub limits)
+          ERROR_LOG=$(head -c 5000 combined_error.txt)
+          {
+            echo "error_log<<ERROREOF"
+            echo "$ERROR_LOG"
+            echo "ERROREOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test_output.txt
+            lint_output.txt
+            combined_error.txt
+
+  # ── Job 3: Auto-fix with Gemini 2.0 Flash ───────────────────
+  auto-fix:
+    needs: [check-version, test-addon]
+    if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install ruff google-genai
+
+      - name: Pre-fix with Ruff
+        run: |
+          ruff check --select=E,F,W --ignore=E402,E501 --fix \
+            __init__.py main.py operators.py panels.py preferences.py properties.py utils.py || true
+
+      - name: Collect addon source code
+        id: source
+        run: |
+          # Gather all Python source files into a single context
+          {
+            for f in __init__.py main.py operators.py panels.py preferences.py properties.py utils.py; do
+              if [ -f "$f" ]; then
+                echo "===== FILE: $f ====="
+                cat "$f"
+                echo ""
+              fi
+            done
+          } > all_source.txt
+          echo "source_collected=true" >> $GITHUB_OUTPUT
+
+      - name: Fetch Blender migration notes
+        id: migration
+        run: |
+          VERSION="${{ needs.check-version.outputs.latest_version }}"
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+
+          # Try to fetch Blender release notes
+          MIGRATION_URL="https://wiki.blender.org/wiki/Reference/Release_Notes/${MAJOR_MINOR}/Python_API"
+          MIGRATION_NOTES=$(curl -sL "$MIGRATION_URL" | head -c 8000 || echo "Migration notes not available")
+
+          {
+            echo "migration_notes<<MIGRATIONEOF"
+            echo "$MIGRATION_NOTES"
+            echo "MIGRATIONEOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Call Gemini for fix
+        id: gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          cat > call_gemini.py << 'PYEOF'
+          import os
+          from google import genai
+
+          client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+          
+          version = "${{ needs.check-version.outputs.latest_version }}"
+          error_log = """${{ needs.test-addon.outputs.error_log }}"""
+          migration = """${{ steps.migration.outputs.migration_notes }}"""
+          
+          with open("all_source.txt", "r") as f:
+              source = f.read()
+
+          prompt = f"""You are a Blender addon maintenance bot. A Blender addon has broken on a new Blender version or needs a metadata update. Your job is to fix the Python code so it works with the new version and update the blender version in bl_info.
+
+          IMPORTANT RULES:
+          - Only fix what is broken. Do not refactor or change working code.
+          - Maintain backward compatibility where possible.
+          - Update the 'blender' key in bl_info in __init__.py to match the new version if it is higher than the current one.
+          - Increment the 'version' tuple in bl_info (e.g., (1, 1) -> (1, 1, 1)) to reflect this update.
+          - Output ONLY the fixed file contents in this exact format for EACH file that needs changes:
+
+          --- FILE: filename.py ---
+          <full file content>
+          --- END FILE ---
+
+          If no fix is needed for a file, do not include it.
+          Do NOT include any explanation, markdown, or commentary — ONLY the file blocks above.
+
+          ## Blender version
+          {version}
+
+          ## Error log
+          {error_log[:4000]}
+
+          ## Current source code
+          {source[:20000]}
+
+          ## Blender migration notes (if available)
+          {migration[:4000]}"""
+
+          response = client.models.generate_content(
+              model="gemini-2.0-flash",
+              contents=prompt
+          )
+          
+          with open("gemini_output.txt", "w") as f:
+              f.write(response.text)
+          PYEOF
+          
+          python3 call_gemini.py
+          echo "✅ Gemini response received"
+
+      - name: Apply fixes
+        id: apply
+        run: |
+          # Parse Gemini output and apply file changes
+          python3 << 'PYEOF'
+          import re, os, sys
+
+          with open("gemini_output.txt", "r") as f:
+              content = f.read()
+
+          # Parse --- FILE: xxx.py --- blocks
+          pattern = r'--- FILE: (\S+) ---\n(.*?)--- END FILE ---'
+          matches = re.findall(pattern, content, re.DOTALL)
+
+          if not matches:
+              print("⚠️ No file blocks found in Gemini output")
+              print("Raw output preview:")
+              print(content[:1000])
+              sys.exit(1)
+
+          fixed_files = []
+          for filename, file_content in matches:
+              filename = filename.strip()
+              # Security: only allow .py files in repo root
+              if not filename.endswith('.py') or '/' in filename or '\\' in filename:
+                  print(f"⚠️ Skipping suspicious filename: {filename}")
+                  continue
+
+              if os.path.exists(filename):
+                  with open(filename, 'w', encoding='utf-8') as f:
+                      f.write(file_content.strip() + '\n')
+                  print(f"✅ Fixed: {filename}")
+                  fixed_files.append(filename)
+              else:
+                  print(f"⚠️ File not found, skipping: {filename}")
+
+          if not fixed_files:
+              print("❌ No files were fixed")
+              sys.exit(1)
+
+          print(f"\n📝 Fixed {len(fixed_files)} file(s): {', '.join(fixed_files)}")
+          PYEOF
+
+      - name: Re-test after fix
+        id: retest
+        continue-on-error: true
+        run: |
+          pip install bpy==${{ needs.check-version.outputs.latest_version }} 2>/dev/null
+          python .github/scripts/test_addon.py 2>&1 | tee retest_output.txt
+          echo "retest_exit=$?" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        id: cpr
+        if: steps.retest.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "fix: update addon for Blender ${{ needs.check-version.outputs.latest_version }}"
+          branch: fix/blender-${{ needs.check-version.outputs.latest_version }}
+          delete-branch: true
+          title: "🔧 Auto-fix: Blender ${{ needs.check-version.outputs.latest_version }} compatibility"
+          body: |
+            ## Automated Blender Compatibility Fix
+
+            A new Blender version (`bpy==${{ needs.check-version.outputs.latest_version }}`) was detected and the addon failed compatibility tests.
+
+            **Gemini 2.0 Flash** analyzed the errors and generated this fix automatically.
+
+            ### What was broken
+            ```
+            ${{ needs.test-addon.outputs.error_log }}
+            ```
+
+            ### Verification
+            - ✅ Fix was re-tested against `bpy==${{ needs.check-version.outputs.latest_version }}`
+            - 🔄 This PR will be merged automatically.
+
+            ---
+            *This PR was created automatically by the Blender Compatibility workflow.*
+          labels: blender-compat,automated
+
+      - name: Auto-approve and Auto-merge PR
+        if: steps.retest.outcome == 'success' && steps.cpr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # First approve the PR
+          gh pr review ${{ steps.cpr.outputs.pull-request-number }} --approve -b "🤖 Auto-approved by compatibility workflow"
+          # Then merge it (squash)
+          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --squash --admin -d
+          echo "✅ PR #${{ steps.cpr.outputs.pull-request-number }} merged automatically!"
+          
+          # Create an automatic release after merge
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          # Extract versions
+          BL_VER="${{ needs.check-version.outputs.latest_version }}"
+          ADDON_VER=$(python3 -c "import ast; f=open('__init__.py'); t=ast.parse(f.read()); v=[node.value for node in ast.walk(t) if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id=='bl_info'][0]['version']; print('.'.join(map(str, v)))")
+          
+          TAG="v${ADDON_VER}"
+          RELEASE_NAME="effortless-renders-${TAG}"
+          
+          # Package
+          mkdir -p "$RELEASE_NAME"
+          cp __init__.py main.py operators.py panels.py preferences.py properties.py utils.py "$RELEASE_NAME/"
+          zip -r "${RELEASE_NAME}.zip" "$RELEASE_NAME"
+
+          # Create release
+          gh release create "$TAG" "${RELEASE_NAME}.zip" \
+            --title "Release ${TAG} (Auto-fix for Blender ${BL_VER})" \
+            --notes "Automated compatibility update for Blender ${BL_VER}."
+          echo "🚀 Auto-release created: $TAG"
+
+      - name: Open Issue if fix failed
+        if: steps.retest.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.check-version.outputs.latest_version }}';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Addon broken on Blender ${version} (auto-fix failed)`,
+              body: `## Blender Compatibility Issue\n\nThe addon failed tests on \`bpy==${version}\` and the automated fix by Gemini was unable to resolve it.\n\n### Error Log\n\`\`\`\n${{ needs.test-addon.outputs.error_log }}\n\`\`\`\n\n### Next Steps\n- Check the [Blender ${version} release notes](https://developer.blender.org/docs/release_notes/)\n- Review the error above and fix manually\n- Run the workflow again after fixing\n\n---\n*This issue was created automatically by the Blender Compatibility workflow.*`,
+              labels: ['blender-compat', 'bug']
+            });
+
+  # ── Job 4: Fallback Issue (no API key) ─────────────────────
+  fallback-issue:
+    needs: [check-version, test-addon]
+    if: needs.test-addon.outputs.test_passed == 'false' && needs.check-version.outputs.has_api_key != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.check-version.outputs.latest_version }}';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Addon broken on Blender ${version}`,
+              body: `## Blender Compatibility Issue\n\nThe addon failed tests on \`bpy==${version}\`.\n\n### Error Log\n\`\`\`\n${{ needs.test-addon.outputs.error_log }}\n\`\`\`\n\n### Auto-fix not available\nSet the \`GEMINI_API_KEY\` secret to enable AI-powered auto-fixing.\n\n---\n*This issue was created automatically by the Blender Compatibility workflow.*`,
+              labels: ['blender-compat', 'bug']
+            });
+
+  # ── Job 5: Update cache on success ─────────────────────────
+  update-cache:
+    needs: [check-version, test-addon]
+    if: needs.test-addon.outputs.test_passed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update cached version
+        run: |
+          VERSION="${{ needs.check-version.outputs.latest_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create or update the cache branch
+          git checkout --orphan blender-compat-cache 2>/dev/null || git checkout blender-compat-cache
+          git rm -rf . 2>/dev/null || true
+          echo "$VERSION" > last_tested_version.txt
+          git add last_tested_version.txt
+          git commit -m "Update last tested version to $VERSION"
+          git push origin blender-compat-cache --force
+
+          echo "✅ Cached version updated to $VERSION"
