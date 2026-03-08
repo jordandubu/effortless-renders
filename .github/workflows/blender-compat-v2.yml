@@ -59,22 +59,22 @@ jobs:
 
           # Get current blender version from bl_info
           cat > get_version.py << 'PYEOF'
-import ast
-import os
+          import ast
+          import os
 
-def get_bl_info_version():
-    with open('__init__.py', 'r') as f:
-        tree = ast.parse(f.read())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == 'bl_info':
-                    info = ast.literal_eval(node.value)
-                    return '.'.join(map(str, info.get('blender', (0,0,0))))
-    return "0.0.0"
+          def get_bl_info_version():
+              with open('__init__.py', 'r') as f:
+                  tree = ast.parse(f.read())
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Assign):
+                      for target in node.targets:
+                          if isinstance(target, ast.Name) and target.id == 'bl_info':
+                              info = ast.literal_eval(node.value)
+                              return '.'.join(map(str, info.get('blender', (0,0,0))))
+              return "0.0.0"
 
-print(get_bl_info_version())
-PYEOF
+          print(get_bl_info_version())
+          PYEOF
           CURRENT_BLENDER=$(python3 get_version.py)
           echo "🔖 Current bl_info blender version: $CURRENT_BLENDER"
 
@@ -88,7 +88,7 @@ PYEOF
 
           # Test if PyPI version > Current in bl_info OR PyPI version != Cache
           # Using python for version comparison to be safe
-          FORCE="${{ inputs.force_test || 'true' }}"
+          FORCE="${{ inputs.force_test || 'false' }}"
           SHOULD_TEST=$(python3 -c "from packaging import version; print('true' if version.parse('$LATEST') > version.parse('$CURRENT_BLENDER') or '$LATEST' != '$CACHED' or '$FORCE' == 'true' else 'false')")
           
           # If PyPI > Current but no fix needed, we still want to trigger the update
