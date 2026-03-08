@@ -62,4 +62,4 @@ This repo is self-maintaining:
 
 ## License
 
-[GPL-2.0](LICENSE) — Free software. See individual source files for full license headers.
+[GPL-3.0](LICENSE) — Free software. See individual source files for full license headers.
