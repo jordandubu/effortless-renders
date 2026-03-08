@@ -5,7 +5,7 @@
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
+#  as published by the Free Software Foundation; either version 3
 #  of the License, or (at your option) any later version.
 #
 #  This program is distributed in the hope that it will be useful,
@@ -28,14 +28,18 @@ from bpy.props import (
 
 from .operators import RenderingOperator, TestConnectionOperator, CreateProductOperator, ImportHelperBoxOperator, OpenLibraryPathOperator, ImportSceneOperator
 from .panels import RenderingOperatorPanel
-from .preferences import AddonPreferences
-from .__init__ import ADDON_NAME
+
 
 
 def get_render_scenes(self, context):
     items = []
-    preferences = context.preferences.addons[ADDON_NAME].preferences
+    # Use the top-level package name for lookup
+    package_name = __name__.partition('.')[0]
+    preferences = context.preferences.addons[package_name].preferences
     library_path = preferences.library_path
+
+    if not os.path.exists(library_path):
+        return [("NONE", "Path not found", "Library path does not exist")]
 
     for file_name in os.listdir(library_path):
         if file_name.endswith(".blend"):
@@ -58,7 +62,7 @@ def register():
     bpy.types.Scene.show_product_info_section = bpy.props.BoolProperty(default=True, description="Toggle the product info section")
 
     bpy.utils.register_class(OpenLibraryPathOperator)
-    bpy.utils.register_class(AddonPreferences)
+
     bpy.utils.register_class(TestConnectionOperator)
     bpy.utils.register_class(RenderingOperator)
     bpy.utils.register_class(CreateProductOperator)
@@ -146,7 +150,7 @@ def unregister():
     bpy.utils.unregister_class(RenderingOperator)
     bpy.utils.unregister_class(CreateProductOperator)
     bpy.utils.unregister_class(RenderingOperatorPanel)
-    bpy.utils.unregister_class(AddonPreferences)
+
     bpy.utils.unregister_class(ImportHelperBoxOperator)
     bpy.utils.unregister_class(OpenLibraryPathOperator)
     bpy.utils.unregister_class(ImportSceneOperator)

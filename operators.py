@@ -5,7 +5,7 @@
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
+#  as published by the Free Software Foundation; either version 3
 #  of the License, or (at your option) any later version.
 #
 #  This program is distributed in the hope that it will be useful,
@@ -24,7 +24,7 @@ import os
 import subprocess
 import sys
 from .utils import test_connection, render_scene
-from .__init__ import ADDON_NAME
+from .__init__ import __package__
 
 class TestConnectionOperator(bpy.types.Operator):
     bl_idname = "object.test_connection"
@@ -56,7 +56,7 @@ class RenderingOperator(bpy.types.Operator):
             return {'CANCELLED'}
 
         blend_file_name = context.scene.render_scene
-        blend_file_path = os.path.join(context.preferences.addons[ADDON_NAME].preferences.library_path, blend_file_name)
+        blend_file_path = os.path.join(context.preferences.addons[__name__.partition('.')[0]].preferences.library_path, blend_file_name)
 
         with bpy.data.libraries.load(blend_file_path) as (data_from, _):
             all_scene_names = data_from.scenes
@@ -144,7 +144,7 @@ class ImportSceneOperator(bpy.types.Operator):
             self.report({'WARNING'}, "No scene file specified")
             return {'CANCELLED'}
 
-        blend_file_path = os.path.join(context.preferences.addons[ADDON_NAME].preferences.library_path, file_scene_name)
+        blend_file_path = os.path.join(context.preferences.addons[__name__.partition('.')[0]].preferences.library_path, file_scene_name)
 
         if not os.path.exists(blend_file_path):
             self.report({'ERROR'}, f"File not found: {blend_file_path}")
@@ -166,7 +166,7 @@ class ImportHelperBoxOperator(bpy.types.Operator):
 
     def execute(self, context):
         blend_file_name = context.scene.render_scene  # ceci est seulement le nom du fichier
-        blend_file_path = os.path.join(context.preferences.addons[ADDON_NAME].preferences.library_path, blend_file_name)
+        blend_file_path = os.path.join(context.preferences.addons[__name__.partition('.')[0]].preferences.library_path, blend_file_name)
 
         with bpy.data.libraries.load(blend_file_path, link=True) as (data_from, data_to):  # Notez que 'link' est à True
             # Importer la collection "helperbox" si elle est disponible
@@ -204,7 +204,7 @@ class OpenLibraryPathOperator(bpy.types.Operator):
     bl_description = "Open the library path in the file explorer"
 
     def execute(self, context):
-        library_path = context.preferences.addons[ADDON_NAME].preferences.library_path
+        library_path = context.preferences.addons[__name__.partition('.')[0]].preferences.library_path
         path = bpy.path.abspath(library_path)
 
 
